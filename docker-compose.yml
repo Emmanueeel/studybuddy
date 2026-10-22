@@ -1,0 +1,116 @@
+
+services:
+  # --- ИНФРАСТРУКТУРА (Базы данных и брокер) ---
+  postgres-auth:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: studybuddy, POSTGRES_PASSWORD: secret, POSTGRES_DB: auth }
+    ports: ["5433:5432"]
+    volumes: [auth_data:/var/lib/postgresql/data]
+    networks: [studybuddy]
+
+  postgres-profile:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: studybuddy, POSTGRES_PASSWORD: secret, POSTGRES_DB: profile }
+    ports: ["5434:5432"]
+    volumes: [profile_data:/var/lib/postgresql/data]
+    networks: [studybuddy]
+
+  postgres-request:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: studybuddy, POSTGRES_PASSWORD: secret, POSTGRES_DB: request }
+    ports: ["5435:5432"]
+    volumes: [request_data:/var/lib/postgresql/data]
+    networks: [studybuddy]
+
+  postgres-review:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: studybuddy, POSTGRES_PASSWORD: secret, POSTGRES_DB: review }
+    ports: ["5436:5432"]
+    volumes: [review_data:/var/lib/postgresql/data]
+    networks: [studybuddy]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports: ["5672:5672", "15672:15672"]
+    networks: [studybuddy]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    networks: [studybuddy]
+
+  # --- МИКРОСЕРВИСЫ ---
+  auth:
+    build: ./services/auth
+    environment:
+      AUTH_DB_URL: postgres://studybuddy:secret@postgres-auth:5432/auth?sslmode=disable
+      JWT_SECRET: dev-secret-change-me
+      AUTH_PORT: "8081"
+    depends_on: [postgres-auth]
+    ports: ["8081:8081"]
+    networks: [studybuddy]
+
+  profile:
+    build: ./services/profile
+    environment:
+      PROFILE_DB_URL: postgres://studybuddy:secret@postgres-profile:5432/profile?sslmode=disable
+      PROFILE_PORT: "8082"
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on: [postgres-profile, rabbitmq]
+    ports: ["8082:8082"]
+    networks: [studybuddy]
+
+  matching:
+    build: ./services/matching
+    environment:
+      MATCHING_PORT: "8083"
+      PROFILE_URL: http://profile:8082
+      REDIS_ADDR: redis:6379
+    depends_on: [profile, redis]
+    ports: ["8083:8083"]
+    networks: [studybuddy]
+
+  request:
+    build: ./services/request
+    environment:
+      REQUEST_DB_URL: postgres://studybuddy:secret@postgres-request:5432/request?sslmode=disable
+      REQUEST_PORT: "8084"
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on: [postgres-request, rabbitmq]
+    ports: ["8084:8084"]
+    networks: [studybuddy]
+
+  review:
+    build: ./services/review
+    environment:
+      REVIEW_DB_URL: postgres://studybuddy:secret@postgres-review:5432/review?sslmode=disable
+      REVIEW_PORT: "8085"
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on: [postgres-review, rabbitmq]
+    ports: ["8085:8085"]
+    networks: [studybuddy]
+
+  gateway:
+    build: ./services/gateway
+    environment:
+      GATEWAY_PORT: "8080"
+      JWT_SECRET: dev-secret-change-me
+      AUTH_URL: http://auth:8081
+      PROFILE_URL: http://profile:8082
+      MATCHING_URL: http://matching:8083
+      REQUEST_URL: http://request:8084
+      REVIEW_URL: http://review:8085
+      REDIS_ADDR: redis:6379
+    depends_on: [auth, profile, matching, request, review, redis]
+    ports: ["8080:8080"]
+    networks: [studybuddy]
+
+volumes:
+  auth_data:
+  profile_data:
+  request_data:
+  review_data:
+
+networks:
+  studybuddy:
+    driver: bridge

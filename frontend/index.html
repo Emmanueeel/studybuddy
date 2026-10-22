@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyBuddy</title>
+    <!-- Подключаем Tailwind CSS для красивого дизайна -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+
+    <!-- Шапка -->
+    <header class="bg-indigo-600 text-white shadow-md p-4">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">StudyBuddy 🎓</h1>
+            <button id="logoutBtn" class="hidden bg-indigo-700 hover:bg-indigo-800 px-4 py-2 rounded text-sm transition" onclick="logout()">Выйти</button>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-4 mt-8">
+        
+        <!-- Экран 1: Авторизация -->
+        <div id="authSection" class="bg-white p-8 rounded-lg shadow-md max-w-md mx-auto">
+            <h2 class="text-2xl font-bold mb-6 text-center">Вход / Регистрация</h2>
+            <div class="space-y-4">
+                <input type="email" id="email" placeholder="Email" class="w-full border p-3 rounded focus:outline-indigo-500">
+                <input type="password" id="password" placeholder="Пароль" class="w-full border p-3 rounded focus:outline-indigo-500">
+                <div class="flex gap-2">
+                    <button onclick="login()" class="w-1/2 bg-indigo-600 text-white p-3 rounded hover:bg-indigo-700 transition">Войти</button>
+                    <button onclick="register()" class="w-1/2 bg-gray-200 text-gray-800 p-3 rounded hover:bg-gray-300 transition">Регистрация</button>
+                </div>
+            </div>
+            <p id="authError" class="text-red-500 text-sm mt-4 text-center hidden"></p>
+        </div>
+
+        <!-- Экран 2: Личный кабинет (скрыт изначально) -->
+        <div id="dashboardSection" class="hidden space-y-8">
+            
+            <!-- Блок профиля и поиска -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Мой профиль -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4">Мой профиль</h3>
+                    <div class="space-y-3">
+                        <input type="text" id="profName" placeholder="Ваше имя" class="w-full border p-2 rounded">
+                        <input type="text" id="profDisciplines" placeholder="Дисциплины (через запятую)" class="w-full border p-2 rounded">
+                        <input type="text" id="profSkills" placeholder="Навыки (через запятую)" class="w-full border p-2 rounded">
+                        <button onclick="saveProfile()" class="bg-green-600 text-white w-full p-2 rounded hover:bg-green-700 transition">Сохранить профиль</button>
+                    </div>
+                </div>
+
+                <!-- Поиск напарника -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4">Найти напарника</h3>
+                    <div class="space-y-3">
+                        <input type="text" id="searchDiscipline" placeholder="Дисциплина (например, Go)" class="w-full border p-2 rounded">
+                        <input type="text" id="searchSkill" placeholder="Навык (например, SQL)" class="w-full border p-2 rounded">
+                        <button onclick="findPartners()" class="bg-blue-600 text-white w-full p-2 rounded hover:bg-blue-700 transition">Искать</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Результаты поиска -->
+            <div id="searchResults" class="hidden bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-4">Результаты поиска</h3>
+                <div id="resultsList" class="space-y-4"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Глобальные переменные
+        const API_URL = 'http://localhost:8080/api';
+        let token = localStorage.getItem('token') || null;
+
+        // При загрузке страницы проверяем, есть ли токен
+        window.onload = () => {
+            if (token) showDashboard();
+        };
+
+        // --- ФУНКЦИИ АВТОРИЗАЦИИ ---
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            try {
+                const res = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    token = data.token;
+                    localStorage.setItem('token', token);
+                    showDashboard();
+                } else {
+                    showError(data || 'Ошибка регистрации');
+                }
+            } catch (e) { showError('Сервер недоступен'); }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            try {
+                const res = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    token = data.token;
+                    localStorage.setItem('token', token);
+                    showDashboard();
+                } else {
+                    showError('Неверный email или пароль');
+                }
+            } catch (e) { showError('Сервер недоступен'); }
+        }
+
+        function logout() {
+            token = null;
+            localStorage.removeItem('token');
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('dashboardSection').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.add('hidden');
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('authError');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        // --- ФУНКЦИИ ЛИЧНОГО КАБИНЕТА ---
+        function showDashboard() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            loadMyProfile();
+        }
+
+        async function saveProfile() {
+            const name = document.getElementById('profName').value;
+            const disciplines = document.getElementById('profDisciplines').value.split(',').map(s => s.trim()).filter(s => s);
+            const skills = document.getElementById('profSkills').value.split(',').map(s => s.trim()).filter(s => s);
+
+            try {
+                const res = await fetch(`${API_URL}/profiles/me`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ name, disciplines, skills, level: "middle", schedule: [], format: "offline" })
+                });
+                if (res.ok) {
+                    alert('Профиль успешно сохранен!');
+                } else {
+                    alert('Ошибка при сохранении профиля');
+                }
+            } catch (e) { alert('Сервер недоступен'); }
+        }
+
+        async function loadMyProfile() {
+            try {
+                const res = await fetch(`${API_URL}/profiles/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('profName').value = data.name || '';
+                    document.getElementById('profDisciplines').value = (data.disciplines || []).join(', ');
+                    document.getElementById('profSkills').value = (data.skills || []).join(', ');
+                }
+            } catch (e) { console.log('Профиль не найден'); }
+        }
+
+        async function findPartners() {
+            const discipline = document.getElementById('searchDiscipline').value;
+            const skill = document.getElementById('searchSkill').value;
+            const resultsDiv = document.getElementById('searchResults');
+            const listDiv = document.getElementById('resultsList');
+
+            try {
+                const res = await fetch(`${API_URL}/matching/find`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ 
+                        discipline: discipline, 
+                        skill: skill, 
+                        skills: [skill], 
+                        level: "middle", 
+                        schedule: [] 
+                    })
+                });
+                
+                const data = await res.json();
+                resultsDiv.classList.remove('hidden');
+                listDiv.innerHTML = '';
+
+                if (data.length === 0) {
+                    listDiv.innerHTML = '<p class="text-gray-500">Никого не найдено :(</p>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const p = item.profile;
+                    const score = (item.score * 100).toFixed(0);
+                    const reasons = item.reasons.join(', ');
+                    
+                    listDiv.innerHTML += `
+                        <div class="border p-4 rounded-lg flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h4 class="font-bold text-lg">${p.name || 'Без имени'} (ID: ${p.user_id})</h4>
+                                <p class="text-sm text-gray-600">Навыки: ${p.skills ? p.skills.join(', ') : '-'}</p>
+                                <p class="text-sm text-gray-600">Дисциплины: ${p.disciplines ? p.disciplines.join(', ') : '-'}</p>
+                                <p class="text-xs text-indigo-600 mt-1">Совпадения: ${reasons}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-green-600">${score}%</div>
+                                <div class="text-xs text-gray-500">Рейтинг: ${p.rating.toFixed(1)}</div>
+                                <button onclick="sendRequest(${p.user_id})" class="mt-2 text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded hover:bg-indigo-200 transition">Отправить заявку</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) { alert('Ошибка поиска'); }
+        }
+        
+        // Заглушка для кнопки заявки
+        async function sendRequest(targetId) {
+            try {
+                const res = await fetch(`${API_URL}/requests/create`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ target_id: targetId, discipline: "Go", message: "Привет! Давай учиться вместе." })
+                });
+                if (res.ok) alert('Заявка отправлена!');
+                else alert('Не удалось отправить заявку');
+            } catch (e) { alert('Сервер недоступен'); }
+        }
+    </script>
+</body>
+</html>
